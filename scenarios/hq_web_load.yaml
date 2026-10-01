@@ -1,0 +1,65 @@
+# Web load: CommCare HQ web users browsing a project.
+#   python -m qaperf run scenarios/hq_web_load.yaml --dry-run
+#   python -m qaperf run scenarios/hq_web_load.yaml --users 5 --run-time 2m     # quick smoke
+#
+# Paths below are standard HQ pages - check each one opens for your perf user on
+# your domain before trusting the numbers (a 302 to login shows up as an error).
+name: hq-web-load
+environment: ${QAPERF_ENV:-staging}
+host: ${HQ_BASE_URL:-https://staging.commcarehq.org}
+vars:
+  domain: ${HQ_DOMAIN:-qateam}
+
+tests:
+  - id: hq_browse
+    type: web_load
+    # Staged ramp: 10 users for 2m, then 25 for 5m, then 50 for 3m. Remove 'stages' and
+    # set users/run_time for a flat load (or pass --users/--run-time on the CLI).
+    stages:
+      - {duration: 2m, users: 10, spawn_rate: 2}
+      - {duration: 5m, users: 25, spawn_rate: 2}
+      - {duration: 3m, users: 50, spawn_rate: 5}
+    users: 10        # used only when --users/--run-time replace the stages
+    run_time: 5m
+    wait_time: [2, 6]          # seconds a user "thinks" between actions
+    # One row per web user (username,password). Without it every virtual user shares auth.username.
+    users_file: ${QAPERF_WEB_USERS:-}
+    auth:
+      type: hq_login
+      username: ${HQ_WEB_USERNAME}
+      password: ${HQ_WEB_PASSWORD}
+    mode: weighted             # random mix by weight; 'sequential' walks the list in order
+    tasks:
+      - {name: "Project dashboard", path: "/a/{domain}/dashboard/project/", weight: 3}
+      - {name: "Reports home", path: "/a/{domain}/reports/", weight: 2}
+      - {name: "Case list report", path: "/a/{domain}/reports/case_list/", weight: 2}
+      - {name: "Mobile workers", path: "/a/{domain}/settings/users/commcare/", weight: 1}
+      - {name: "Web Apps home", path: "/a/{domain}/cloudcare/apps/v2/", weight: 2}
+
+  # Plug in an existing dimagi-qa Locust script unchanged - qa-perf still applies budgets,
+  # history, HTML report and Slack to it. Uncomment and fill in the args that script expects.
+  # - id: bha_search_admit
+  #   type: web_load
+  #   locustfile: ../../dimagi-qa/LocustScripts/update-scripts/commcarehq-central-registry-search-and-admit-mw-login.py
+  #   cwd: ../../dimagi-qa
+  #   pythonpath: [../../dimagi-qa, ../../dimagi-qa/LocustScripts/update-scripts]
+  #   users: 20
+  #   spawn_rate: 2
+  #   run_time: 10m
+  #   locust_args: [--domain, co-carecoordination-perf, --app-id, "<app id>", --build-id, "<build id>",
+  #                 --user-details, "<path to credentials json>", --app-config, "<path to app config json>"]
+
+budgets:
+  "web_load/hq_browse/Aggregated/p95_ms": {warn: 2500, fail: 5000}
+  "web_load/hq_browse/Aggregated/error_rate_pct": {warn: 0.5, fail: 2}
+  "web_load/hq_browse/Project dashboard/p95_ms": {warn: 2000, fail: 4000}
+  "web_load/hq_browse/Case list report/p95_ms": {warn: 3000, fail: 6000}
+  "web_load/hq_browse/auth: login/p95_ms": {warn: 3000, fail: 6000}
+
+regression:
+  baseline_runs: 5
+  threshold_pct: 25
+
+reporting:
+  slack: false        # or pass --slack; needs SLACK_WEBHOOK_URL or SLACK_BOT_TOKEN + SLACK_CHANNEL_ID
+  slack_on: always    # or 'problems' to post only on warn/fail

@@ -1,0 +1,76 @@
+# Mobile load with multiple users: N CommCare mobile workers, each on its own simulated
+# device, doing what the app does - restore, submit forms, sync, heartbeat.
+#   python -m qaperf run scenarios/commcare_mobile_load.yaml --dry-run
+#   python -m qaperf run scenarios/commcare_mobile_load.yaml --users 5 --run-time 2m   # smoke first
+#
+# This SUBMITS REAL FORMS (creates cases) on the target domain - use a dedicated perf
+# domain + perf mobile workers, never a project's real data.
+name: commcare-mobile-load
+environment: ${QAPERF_ENV:-staging}
+host: ${HQ_BASE_URL:-https://staging.commcarehq.org}
+vars:
+  case_type: qaperf_case
+
+tests:
+  - id: mobile_workers
+    type: mobile_load
+    domain: ${HQ_PERF_DOMAIN:-qateam}
+    app_id: ${HQ_PERF_APP_ID:-}          # needed for heartbeat / app-scoped restore + receiver
+    app_version: ${HQ_PERF_APP_VERSION:-}
+    # One row per mobile worker: username,password (short name or full user@domain.commcarehq.org).
+    # Give at least as many rows as peak users so every virtual phone is a distinct user.
+    users_file: ${QAPERF_MOBILE_USERS:-../data/mobile_users.example.csv}
+    auth: {type: basic}
+    stages:
+      - {duration: 2m, users: 20, spawn_rate: 1}
+      - {duration: 5m, users: 50, spawn_rate: 2}
+      - {duration: 3m, users: 100, spawn_rate: 5}
+    users: 20
+    run_time: 5m
+    workers: 0                 # >0 runs Locust master + N local worker processes (for big user counts)
+    wait_time: [10, 30]        # a field worker isn't submitting every second
+    initial_restore: true
+    restore_max_wait_s: 300
+    actions:
+      - kind: submit_form
+        name: "form: register case"
+        template: ../data/forms/register_case.xml
+        weight: 3
+        vars: {xmlns: "http://openrosa.org/formdesigner/QAPERF-REGISTER"}
+      - kind: submit_form
+        name: "form: update case"
+        template: ../data/forms/update_case.xml
+        weight: 2
+        vars: {xmlns: "http://openrosa.org/formdesigner/QAPERF-UPDATE"}
+      - kind: sync
+        name: "restore: incremental"
+        weight: 2
+      # - kind: heartbeat        # needs app_id
+      #   weight: 1
+      # - kind: request          # any other endpoint, e.g. case search
+      #   name: "case search"
+      #   path: /a/{domain}/phone/search/{app_id}/
+      #   params: {case_type: "{case_type}"}
+      #   weight: 1
+
+    # Optional: while the load runs, measure a real phone too - same keys as a mobile_perf test.
+    # device_probe:
+    #   start_after_s: 120
+    #   package: org.commcare.dalvik
+    #   measures: [cold_start, warm_start, memory]
+    #   iterations: 3
+    #   flows:
+    #     - name: login_sync_under_load
+    #       path: ${CC_MOBILE_FLOWS:-../../commcare-mobile/dimagi-qa-commcare-mobile/flows}/login/commcare_odk_01_login.yaml
+    #       env: {APP_CODE_BASIC_TESTS: "${APP_CODE_BASIC_TESTS:-}", CC_TEST_USERNAME: test1, CC_TEST_PASSWORD: "${CC_TEST_PASSWORD:-}"}
+
+budgets:
+  "mobile_load/mobile_workers/restore: initial (total)/p95_ms": {warn: 15000, fail: 30000}
+  "mobile_load/mobile_workers/restore: incremental (total)/p95_ms": {warn: 5000, fail: 10000}
+  "mobile_load/mobile_workers/form: */p95_ms": {warn: 2000, fail: 5000}
+  "mobile_load/mobile_workers/Aggregated/error_rate_pct": {warn: 0.5, fail: 2}
+  # "mobile_load/mobile_workers/device:cold_start/p50_ms": {warn: 3000, fail: 5000}
+
+regression:
+  baseline_runs: 5
+  threshold_pct: 25

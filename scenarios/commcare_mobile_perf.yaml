@@ -1,0 +1,49 @@
+# Mobile device performance: CommCare Android on real devices / emulators via adb.
+#   python -m qaperf devices                                         # what's attached
+#   python -m qaperf run scenarios/commcare_mobile_perf.yaml --dry-run
+#   python -m qaperf run scenarios/commcare_mobile_perf.yaml
+#
+# Needs: adb on PATH, >=1 device in `adb devices`, CommCare installed (or set 'apk'),
+# and Maestro on PATH for the flows. Reuses dimagi-qa-commcare-mobile's Maestro flows.
+name: commcare-mobile-perf
+environment: ${QAPERF_ENV:-staging}
+
+tests:
+  - id: device_perf
+    type: mobile_perf
+    package: org.commcare.dalvik
+    # activity: org.commcare.dalvik/org.commcare.activities.DispatchActivity   # default: resolved from the launcher
+    # apk: ../../user_inputs/app-release3.3.2.apk   # installed if CommCare is missing
+    # install: true                                  # force reinstall every run
+    devices: auto            # or a list of serials, e.g. [emulator-5554, R58M123ABC]
+    parallel: true           # measure all devices at once
+    maestro_parallel: false  # set true once you've confirmed parallel Maestro works on your host
+    iterations: 5
+    measures: [cold_start, warm_start, memory]
+    sample_interval_s: 2
+    # With several devices, each device logs in as the next user in this CSV.
+    users_file: ${QAPERF_DEVICE_USERS:-}
+    flows:
+      - name: install_and_login
+        path: ${CC_MOBILE_FLOWS:-../../commcare-mobile/dimagi-qa-commcare-mobile/flows}/login/commcare_odk_01_login.yaml
+        iterations: 1
+        env:
+          APP_CODE_BASIC_TESTS: ${APP_CODE_BASIC_TESTS:-}
+          CC_TEST_USERNAME: "{username}"   # filled per device from users_file
+          CC_TEST_PASSWORD: "{password}"
+      - name: submit_10_forms_with_sync
+        path: ${CC_MOBILE_FLOWS:-../../commcare-mobile/dimagi-qa-commcare-mobile/flows}/form_submissions/multiple_submissions_10x_background_sync.yaml
+        iterations: 3
+        env:
+          APP_CODE_BASIC_TESTS: ${APP_CODE_BASIC_TESTS:-}
+          CC_TEST_USERNAME: "{username}"
+          CC_TEST_PASSWORD: "{password}"
+
+budgets:
+  "mobile_perf/device_perf/cold_start/p50_ms": {warn: 2500, fail: 4000}
+  "mobile_perf/device_perf/warm_start/p50_ms": {warn: 800, fail: 1500}
+  "mobile_perf/device_perf/idle_memory/pss_mb": {warn: 180, fail: 250}
+  "mobile_perf/device_perf/flow:*/success_rate_pct": {fail: 100}
+  "mobile_perf/device_perf/flow:submit_10_forms_with_sync/p50_s": {warn: 150, fail: 240}
+  "mobile_perf/device_perf/flow:*/peak_pss_mb": {warn: 250, fail: 350}
+  "mobile_perf/device_perf/flow:*/janky_frames_pct": {warn: 15, fail: 30}

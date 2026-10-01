@@ -1,0 +1,20 @@
+<?xml version='1.0' ?>
+<!-- Updates a case this mobile worker already owns (existing_case_id comes from its restore
+     or from cases it registered during this run). Fails loudly if the user has no cases yet. -->
+<data xmlns:jrm="http://dev.commcarehq.org/jr/xforms" xmlns="{{xmlns}}" uiVersion="1" version="1" name="QA Perf Update">
+  <visit_note>{{random_name}}</visit_note>
+  <n0:case xmlns:n0="http://commcarehq.org/case/transaction/v2" case_id="{{existing_case_id}}" date_modified="{{now}}" user_id="{{user_id}}">
+    <n0:update>
+      <n0:last_visit>{{now}}</n0:last_visit>
+      <n0:visit_note>{{random_name}}</n0:visit_note>
+    </n0:update>
+  </n0:case>
+  <n1:meta xmlns:n1="http://openrosa.org/jr/xforms">
+    <n1:deviceID>{{device_id}}</n1:deviceID>
+    <n1:timeStart>{{now}}</n1:timeStart>
+    <n1:timeEnd>{{now}}</n1:timeEnd>
+    <n1:username>{{username_short}}</n1:username>
+    <n1:userID>{{user_id}}</n1:userID>
+    <n1:instanceID>{{instance_id}}</n1:instanceID>
+  </n1:meta>
+</data>

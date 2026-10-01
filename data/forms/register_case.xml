@@ -1,0 +1,27 @@
+<?xml version='1.0' ?>
+<!--
+  XForm submission template for mobile_load 'submit_form'. Double-brace placeholders are filled per submission:
+    instance_id, case_id (new uuid each time), existing_case_id (a case this user already has),
+    now, user_id (from the user's restore), username, username_short, device_id, app_version,
+    random_name, plus anything in the action's or scenario's 'vars' (xmlns, case_type here).
+  An unknown/empty placeholder fails that submission loudly rather than sending a bad form.
+  For realistic payloads, replace this with a real submission from your perf app (same xmlns).
+-->
+<data xmlns:jrm="http://dev.commcarehq.org/jr/xforms" xmlns="{{xmlns}}" uiVersion="1" version="1" name="QA Perf Register">
+  <client_name>{{random_name}}</client_name>
+  <n0:case xmlns:n0="http://commcarehq.org/case/transaction/v2" case_id="{{case_id}}" date_modified="{{now}}" user_id="{{user_id}}">
+    <n0:create>
+      <n0:case_name>{{random_name}}</n0:case_name>
+      <n0:owner_id>{{user_id}}</n0:owner_id>
+      <n0:case_type>{{case_type}}</n0:case_type>
+    </n0:create>
+  </n0:case>
+  <n1:meta xmlns:n1="http://openrosa.org/jr/xforms">
+    <n1:deviceID>{{device_id}}</n1:deviceID>
+    <n1:timeStart>{{now}}</n1:timeStart>
+    <n1:timeEnd>{{now}}</n1:timeEnd>
+    <n1:username>{{username_short}}</n1:username>
+    <n1:userID>{{user_id}}</n1:userID>
+    <n1:instanceID>{{instance_id}}</n1:instanceID>
+  </n1:meta>
+</data>

@@ -1,0 +1,68 @@
+# Manual (workflow_dispatch) perf run.
+# Runs web_load / mobile_load scenarios. mobile_perf needs a device, so run it on a
+# self-hosted runner with a phone attached, or add an Android emulator step first.
+name: QA perf
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Scenario file under scenarios/
+        required: true
+        default: hq_web_load.yaml
+      environment:
+        description: Environment name (staging, production, ...)
+        required: true
+        default: staging
+      users:
+        description: Override virtual users (blank = scenario's stages)
+        required: false
+      run_time:
+        description: Override run time, e.g. 5m (blank = scenario's)
+        required: false
+      allow_production:
+        description: Allow load against production (needs env owner sign-off)
+        type: boolean
+        default: false
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: qa-perf-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      # Keep run history between CI runs so trends + regression detection work.
+      - uses: actions/cache@v4
+        with:
+          path: results/history.jsonl
+          key: qaperf-history-${{ inputs.environment }}-${{ github.run_id }}
+          restore-keys: qaperf-history-${{ inputs.environment }}-
+
+      - name: Run scenario
+        env:
+          QAPERF_ENV: ${{ inputs.environment }}
+          HQ_WEB_USERNAME: ${{ secrets.QAPERF_HQ_WEB_USERNAME }}
+          HQ_WEB_PASSWORD: ${{ secrets.QAPERF_HQ_WEB_PASSWORD }}
+          SLACK_WEBHOOK_URL: ${{ secrets.QAPERF_SLACK_WEBHOOK_URL }}
+        run: |
+          args=(run "scenarios/${{ inputs.scenario }}" --env "${{ inputs.environment }}" --slack
+                --report-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+          [ -n "${{ inputs.users }}" ] && args+=(--users "${{ inputs.users }}")
+          [ -n "${{ inputs.run_time }}" ] && args+=(--run-time "${{ inputs.run_time }}")
+          [ "${{ inputs.allow_production }}" = "true" ] && args+=(--allow-production)
+          python -m qaperf "${args[@]}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-perf-results
+          path: results/
+          retention-days: 14
